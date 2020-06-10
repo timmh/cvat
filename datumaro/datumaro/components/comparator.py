@@ -7,17 +7,13 @@ from itertools import zip_longest
 import numpy as np
 
 from datumaro.components.extractor import AnnotationType, LabelCategories
+from datumaro.components.operations import get_segments
 
 
 class Comparator:
-    def __init__(self,
-            iou_threshold=0.5, conf_threshold=0.9):
+    def __init__(self, iou_threshold=0.5, conf_threshold=0.9):
         self.iou_threshold = iou_threshold
         self.conf_threshold = conf_threshold
-
-    @staticmethod
-    def iou(box_a, box_b):
-        return box_a.iou(box_b)
 
     # pylint: disable=no-self-use
     def compare_dataset_labels(self, extractor_a, extractor_b):
@@ -40,12 +36,12 @@ class Comparator:
     def compare_item_labels(self, item_a, item_b):
         conf_threshold = self.conf_threshold
 
-        a_labels = set([ann.label for ann in item_a.annotations \
+        a_labels = set(ann.label for ann in item_a.annotations \
             if ann.type is AnnotationType.label and \
-               conf_threshold < ann.attributes.get('score', 1)])
-        b_labels = set([ann.label for ann in item_b.annotations \
+               conf_threshold < ann.attributes.get('score', 1))
+        b_labels = set(ann.label for ann in item_b.annotations \
             if ann.type is AnnotationType.label and \
-               conf_threshold < ann.attributes.get('score', 1)])
+               conf_threshold < ann.attributes.get('score', 1))
 
         a_unmatched = a_labels - b_labels
         b_unmatched = b_labels - a_labels
@@ -55,14 +51,9 @@ class Comparator:
 
     def compare_item_bboxes(self, item_a, item_b):
         iou_threshold = self.iou_threshold
-        conf_threshold = self.conf_threshold
 
-        a_boxes = [ann for ann in item_a.annotations \
-            if ann.type is AnnotationType.bbox and \
-               conf_threshold < ann.attributes.get('score', 1)]
-        b_boxes = [ann for ann in item_b.annotations \
-            if ann.type is AnnotationType.bbox and \
-               conf_threshold < ann.attributes.get('score', 1)]
+        a_boxes = get_segments(item_a.annotations, self.conf_threshold)
+        b_boxes = get_segments(item_b.annotations, self.conf_threshold)
         a_boxes.sort(key=lambda ann: 1 - ann.attributes.get('score', 1))
         b_boxes.sort(key=lambda ann: 1 - ann.attributes.get('score', 1))
 
@@ -71,9 +62,7 @@ class Comparator:
         a_matches = -np.ones(len(a_boxes), dtype=int)
         b_matches = -np.ones(len(b_boxes), dtype=int)
 
-        iou_matrix = np.array([
-            [self.iou(a, b) for b in b_boxes] for a in a_boxes
-        ])
+        iou_matrix = np.array([[a.iou(b) for b in b_boxes] for a in a_boxes])
 
         # matches: boxes we succeeded to match completely
         # mispred: boxes we succeeded to match, having label mismatch

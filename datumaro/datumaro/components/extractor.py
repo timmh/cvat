@@ -9,6 +9,7 @@ import numpy as np
 
 from datumaro.util.image import Image
 
+
 AnnotationType = Enum('AnnotationType',
     [
         'label',
@@ -327,24 +328,6 @@ class CompiledMask:
     def lazy_extract(self, instance_id):
         return lambda: self.extract(instance_id)
 
-def compute_iou(bbox_a, bbox_b):
-    aX, aY, aW, aH = bbox_a
-    bX, bY, bW, bH = bbox_b
-    in_right = min(aX + aW, bX + bW)
-    in_left = max(aX, bX)
-    in_top = max(aY, bY)
-    in_bottom = min(aY + aH, bY + bH)
-
-    in_w = max(0, in_right - in_left)
-    in_h = max(0, in_bottom - in_top)
-    intersection = in_w * in_h
-
-    a_area = aW * aH
-    b_area = bW * bH
-    union = a_area + b_area - intersection
-
-    return intersection / max(1.0, union)
-
 class _Shape(Annotation):
     # pylint: disable=redefined-builtin
     def __init__(self, type, points=None, label=None, z_order=None,
@@ -477,7 +460,8 @@ class Bbox(_Shape):
         ]
 
     def iou(self, other):
-        return compute_iou(self.get_bbox(), other.get_bbox())
+        from datumaro.util.annotation_tools import bbox_iou
+        return bbox_iou(self.get_bbox(), other.get_bbox())
 
 class PointsCategories(Categories):
     Category = namedtuple('Category', ['labels', 'joints'])

@@ -7,6 +7,9 @@ from itertools import groupby
 
 import numpy as np
 
+from datumaro.components.extractor import AnnotationType, RleMask
+from datumaro.util.mask_tools import mask_to_rle
+
 
 def find_instances(instance_anns):
     instance_anns = sorted(instance_anns, key=lambda a: a.group)
@@ -34,6 +37,10 @@ def softmax(x):
     return np.exp(x) / sum(np.exp(x))
 
 def nms(boxes, iou_thresh=0.5):
+    """
+    Non-maxima suppression algorithm.
+    """
+
     indices = np.argsort([b.attributes['score'] for b in boxes])
     ious = np.array([[a.iou(b) for b in boxes] for a in boxes])
 
@@ -49,3 +56,57 @@ def nms(boxes, iou_thresh=0.5):
         indices = np.delete(indices, to_remove)
 
     return predictions
+
+def bbox_iou(bbox_a, bbox_b):
+    """
+    IoU computations for simple cases with bounding boxes
+    """
+
+    aX, aY, aW, aH = bbox_a
+    bX, bY, bW, bH = bbox_b
+    in_right = min(aX + aW, bX + bW)
+    in_left = max(aX, bX)
+    in_top = max(aY, bY)
+    in_bottom = min(aY + aH, bY + bH)
+
+    in_w = max(0, in_right - in_left)
+    in_h = max(0, in_bottom - in_top)
+    intersection = in_w * in_h
+
+    a_area = aW * aH
+    b_area = bW * bH
+    union = a_area + b_area - intersection
+
+    return intersection / max(1.0, union)
+
+def iou(a, b):
+    """
+    Generic IoU computation with masks, polygons, and boxes.
+    """
+    try:
+        from pycocotools.mask import iou as _iou
+
+        is_bbox = AnnotationType.bbox in [a.type, b.type]
+        if is_bbox:
+            a = [a.get_bbox()]
+            b = [b.get_bbox()]
+        else:
+            def _to_rle(ann):
+                from pycocotools import mask as mask_utils
+                if ann.type == AnnotationType.polygon:
+                    x, y, w, h = ann.get_bbox()
+                    w = x + w
+                    h = y + h
+                    return mask_utils.frPyObjects([ann.points], h, w)
+                elif isinstance(ann, RleMask):
+                    return [ann._rle]
+                elif ann.type == AnnotationType.mask:
+                    x, y, w, h = ann.get_bbox()
+                    w = x + w
+                    h = y + h
+                    return mask_utils.frPyObjects(mask_to_rle(ann.image), h, w)
+            a = _to_rle(a)
+            b = _to_rle(b)
+        return _iou(a, b, [not is_bbox])
+    except ImportError:
+        return bbox_iou(a, b)

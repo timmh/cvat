@@ -317,16 +317,7 @@ class Subset(Extractor):
 class Dataset(Extractor):
     @classmethod
     def from_extractors(cls, *sources):
-        # merge categories
-        # TODO: implement properly with merging and annotations remapping
-        categories = {}
-        for source in sources:
-            categories.update(source.categories())
-        for source in sources:
-            for cat_type, source_cat in source.categories().items():
-                if not categories[cat_type] == source_cat:
-                    raise NotImplementedError(
-                        "Merging different categories is not implemented yet")
+        categories = cls._merge_categories(s.categories() for s in sources)
         dataset = Dataset(categories=categories)
 
         # merge items
@@ -422,7 +413,7 @@ class Dataset(Extractor):
     @classmethod
     def _merge_items(cls, existing_item, current_item, path=None):
         return existing_item.wrap(path=path,
-        image=cls._merge_images(existing_item, current_item),
+            image=cls._merge_images(existing_item, current_item),
             annotations=cls._merge_anno(
                 existing_item.annotations, current_item.annotations))
 
@@ -454,18 +445,15 @@ class Dataset(Extractor):
 
     @staticmethod
     def _merge_anno(a, b):
-        from itertools import chain
-        merged = []
-        for item in chain(a, b):
-            found = False
-            for elem in merged:
-                if elem == item:
-                    found = True
-                    break
-            if not found:
-                merged.append(item)
+        # TODO: implement properly with merging and annotations remapping
+        from .operations import merge_annotations
+        return merge_annotations(a, b)
 
-        return merged
+    @staticmethod
+    def _merge_categories(sources):
+        # TODO: implement properly with merging and annotations remapping
+        from .operations import merge_categories
+        return merge_categories(sources)
 
 class ProjectDataset(Dataset):
     def __init__(self, project):
@@ -500,14 +488,9 @@ class ProjectDataset(Dataset):
 
         # merge categories
         # TODO: implement properly with merging and annotations remapping
-        categories = {}
-        for source in self._sources.values():
-            categories.update(source.categories())
-        for source in self._sources.values():
-            for cat_type, source_cat in source.categories().items():
-                if not categories[cat_type] == source_cat:
-                    raise NotImplementedError(
-                        "Merging different categories is not implemented yet")
+        categories = self._merge_categories(s.categories()
+            for s in self._sources.values())
+        # ovewrite with own categories
         if own_source is not None and (not categories or len(own_source) != 0):
             categories.update(own_source.categories())
         self._categories = categories
@@ -567,7 +550,8 @@ class ProjectDataset(Dataset):
             rest_path = path[1:]
             return self._sources[source].get(
                 item_id=item_id, subset=subset, path=rest_path)
-        return self._subsets[subset].items[item_id]
+        subset = self._subsets[subset]
+        return subset.items[item_id]
 
     def put(self, item, item_id=None, subset=None, path=None):
         if path is None:
