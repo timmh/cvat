@@ -16,6 +16,7 @@ from datumaro.components.comparator import Comparator
 from datumaro.components.dataset_filter import DatasetItemEncoder
 from datumaro.components.extractor import AnnotationType
 from datumaro.components.cli_plugin import CliPlugin
+from datumaro.components.operations import merge_datasets
 from .diff import DiffVisualizer
 from ...util import add_subparser, CliException, MultilineFormatter, \
     make_file_name
@@ -53,7 +54,7 @@ def create_command(args):
     if osp.isdir(project_env_dir) and os.listdir(project_env_dir):
         if not args.overwrite:
             raise CliException("Directory '%s' already exists "
-                "(pass --overwrite to force creation)" % project_env_dir)
+                "(pass --overwrite to overwrite)" % project_env_dir)
         else:
             shutil.rmtree(project_env_dir, ignore_errors=True)
 
@@ -61,7 +62,7 @@ def create_command(args):
     if osp.isdir(own_dataset_dir) and os.listdir(own_dataset_dir):
         if not args.overwrite:
             raise CliException("Directory '%s' already exists "
-                "(pass --overwrite to force creation)" % own_dataset_dir)
+                "(pass --overwrite to overwrite)" % own_dataset_dir)
         else:
             # NOTE: remove the dir to avoid using data from previous project
             shutil.rmtree(own_dataset_dir)
@@ -147,7 +148,7 @@ def import_command(args):
     if osp.isdir(project_env_dir) and os.listdir(project_env_dir):
         if not args.overwrite:
             raise CliException("Directory '%s' already exists "
-                "(pass --overwrite to force creation)" % project_env_dir)
+                "(pass --overwrite to overwrite)" % project_env_dir)
         else:
             shutil.rmtree(project_env_dir, ignore_errors=True)
 
@@ -155,7 +156,7 @@ def import_command(args):
     if osp.isdir(own_dataset_dir) and os.listdir(own_dataset_dir):
         if not args.overwrite:
             raise CliException("Directory '%s' already exists "
-                "(pass --overwrite to force creation)" % own_dataset_dir)
+                "(pass --overwrite to overwrite)" % own_dataset_dir)
         else:
             # NOTE: remove the dir to avoid using data from previous project
             shutil.rmtree(own_dataset_dir)
@@ -326,7 +327,7 @@ def export_command(args):
     if dst_dir:
         if not args.overwrite and osp.isdir(dst_dir) and os.listdir(dst_dir):
             raise CliException("Directory '%s' already exists "
-                "(pass --overwrite to force creation)" % dst_dir)
+                "(pass --overwrite to overwrite)" % dst_dir)
     else:
         dst_dir = generate_next_dir_name('%s-%s' % \
             (project.config.project_name, make_file_name(args.format)))
@@ -422,7 +423,7 @@ def extract_command(args):
         if dst_dir:
             if not args.overwrite and osp.isdir(dst_dir) and os.listdir(dst_dir):
                 raise CliException("Directory '%s' already exists "
-                    "(pass --overwrite to force creation)" % dst_dir)
+                    "(pass --overwrite to overwrite)" % dst_dir)
         else:
             dst_dir = generate_next_dir_name('%s-filter' % \
                 project.config.project_name)
@@ -450,6 +451,8 @@ def extract_command(args):
 
     return 0
 
+MergeStrategy = Enum('MergeStrategy', ['merge', 'update'])
+
 def build_merge_parser(parser_ctor=argparse.ArgumentParser):
     parser = parser_ctor(help="Merge projects",
         description="""
@@ -464,6 +467,15 @@ def build_merge_parser(parser_ctor=argparse.ArgumentParser):
 
     parser.add_argument('other_project_dir',
         help="Directory of the project to get data updates from")
+    parser.add_argument('-s', '--strategy',
+        type=MergeStrategy, default=MergeStrategy.merge,
+        help="Merging strategy (options: %s; default: %s)" % \
+            (', '.join(map(str, MergeStrategy)), '%(default)s')
+    )
+    parser.add_argument('--iou-thresh', default=0.5, type=float,
+        help="IoU match threshold for detections (default: %(default)s)")
+    parser.add_argument('--conf-thresh', default=0.5, type=float,
+        help="Confidence threshold for detections (default: %(default)s)")
     parser.add_argument('-o', '--output-dir', dest='dst_dir', default=None,
         help="Output directory (default: current project's dir)")
     parser.add_argument('--overwrite', action='store_true',
@@ -482,15 +494,27 @@ def merge_command(args):
     if dst_dir:
         if not args.overwrite and osp.isdir(dst_dir) and os.listdir(dst_dir):
             raise CliException("Directory '%s' already exists "
-                "(pass --overwrite to force creation)" % dst_dir)
+                "(pass --overwrite to overwrite)" % dst_dir)
+    elif args.strategy == MergeStrategy.merge:
+        dst_dir = generate_next_dir_name('merged-project')
 
     first_dataset = first_project.make_dataset()
-    first_dataset.update(second_project.make_dataset())
+    second_dataset = second_project.make_dataset()
 
-    first_dataset.save(save_dir=dst_dir)
+    if args.strategy == MergeStrategy.update:
+        first_dataset.update(second_dataset)
+        merged_dataset = first_dataset
+    elif args.strategy == MergeStrategy.merge:
+        merged_dataset = merge_datasets(first_dataset, second_dataset,
+            iou_threshold=args.iou_thresh, conf_threshold=args.conf_thresh)
+        merged_project = Project()
+        output_dataset = merged_project.make_dataset()
+        output_dataset.define_categories(merged_dataset.categories())
+        merged_dataset = output_dataset.update(merged_dataset)
+    merged_dataset.save(save_dir=dst_dir)
 
     if dst_dir is None:
-        dst_dir = first_project.config.project_dir
+        dst_dir = merged_project.config.project_dir
     dst_dir = osp.abspath(dst_dir)
     log.info("Merge results have been saved to '%s'" % dst_dir)
 
@@ -540,7 +564,7 @@ def diff_command(args):
     if dst_dir:
         if not args.overwrite and osp.isdir(dst_dir) and os.listdir(dst_dir):
             raise CliException("Directory '%s' already exists "
-                "(pass --overwrite to force creation)" % dst_dir)
+                "(pass --overwrite to overwrite)" % dst_dir)
     else:
         dst_dir = generate_next_dir_name('%s-%s-diff' % (
             first_project.config.project_name,
@@ -594,7 +618,7 @@ def transform_command(args):
     if dst_dir:
         if not args.overwrite and osp.isdir(dst_dir) and os.listdir(dst_dir):
             raise CliException("Directory '%s' already exists "
-                "(pass --overwrite to force creation)" % dst_dir)
+                "(pass --overwrite to overwrite)" % dst_dir)
     else:
         dst_dir = generate_next_dir_name('%s-%s' % \
             (project.config.project_name, make_file_name(args.transform)))
