@@ -19,13 +19,11 @@ from ...util.project import load_project, generate_next_dir_name
 def build_add_parser(parser_ctor=argparse.ArgumentParser):
     builtins = sorted(Environment().launchers.items)
 
-    parser = parser_ctor(help="Export project",
+    parser = parser_ctor(help="Add model to project",
         description="""
             Registers an executable model into a project. A model requires
             a launcher to be executed. Each launcher has its own options, which
             are passed after '--' separator, pass '-- -h' for more info.
-            |n
-            Launchers:|n
             |n
             List of builtin launchers: %s
         """ % ', '.join(builtins),
@@ -88,7 +86,9 @@ def add_command(args):
     })
     project.make_executable_model(args.name)
 
-    log.info("Adding the model")
+    log.info("Checking the model")
+    project.make_executable_model(args.name)
+
     project.save()
 
     log.info("Model '%s' with launcher '%s' has been added to project '%s'" % \
@@ -143,7 +143,7 @@ def run_command(args):
             (project.config.project_name))
 
     project.make_dataset().apply_model(
-        save_dir=osp.abspath(dst_dir),
+        save_dir=dst_dir,
         model=args.model_name)
 
     log.info("Inference results have been saved to '%s'" % dst_dir)
