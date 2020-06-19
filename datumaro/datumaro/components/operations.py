@@ -6,6 +6,7 @@
 from itertools import chain
 import numpy as np
 
+from datumaro.components.comparator import Comparator
 from datumaro.components.extractor import AnnotationType, Bbox
 from datumaro.components.project import Dataset
 from datumaro.util.annotation_tools import iou as segment_iou, \
@@ -67,7 +68,7 @@ def merge_datasets(a, b, iou_threshold=1.0, conf_threshold=1.0):
 
 def merge_segments(anns, iou_threshold=1.0, conf_threshold=1.0):
     anns = get_segments(anns, conf_threshold=conf_threshold)
-    clusters, _ = find_segment_clusters(anns, iou_threshold=iou_threshold)
+    clusters = find_segment_clusters(anns, iou_threshold=iou_threshold)
 
     merged = []
     for cluster in clusters:
@@ -114,7 +115,6 @@ def find_cluster_label(cluster):
     return label, score
 
 def find_segment_clusters(segments, iou_threshold=1.0):
-    # build filtered IoU matrix
     ious = np.eye(len(segments))
     for i, a in enumerate(segments):
         for j, b in enumerate(segments[i+1:]):
@@ -122,6 +122,43 @@ def find_segment_clusters(segments, iou_threshold=1.0):
             iou = segment_iou(a, b)
             ious[i, j] = iou
             ious[j, i] = iou
+
+    # find clusters
+    clusters = []
+    visited = set()
+    for cluster_idx, _ in enumerate(segments):
+        if cluster_idx in visited:
+            continue
+
+        cluster = set()
+        to_visit = {cluster_idx}
+        while to_visit:
+            c = to_visit.pop()
+            cluster.add(c)
+            visited.add(c)
+
+            for i in range(c+1, len(segments)):
+                if i not in visited and iou_threshold <= ious[c, i]:
+                    to_visit.add(i)
+
+        clusters.append([segments[i] for i in cluster])
+
+    return clusters
+
+def find_segment_clusters2(sources, iou_threshold=1.0):
+    sources = [get_segments(source) for source in sources]
+
+    all_matches = []
+    for a_idx, src_a in enumerate(sources):
+        for src_b in sources[a_idx+1 :]:
+            matches, mismatches, a_miss, b_miss = Comparator(iou_threshold) \
+                .compare_item_bboxes(src_a, src_b)
+            matches += mismatches
+
+            # indices
+
+            all_matches.append()
+
 
     # find clusters
     clusters = []
