@@ -12,11 +12,10 @@ import shutil
 
 from datumaro.components.project import Project, Environment, \
     PROJECT_DEFAULT_CONFIG as DEFAULT_CONFIG
-from datumaro.components.comparator import Comparator
 from datumaro.components.dataset_filter import DatasetItemEncoder
 from datumaro.components.extractor import AnnotationType
 from datumaro.components.cli_plugin import CliPlugin
-from datumaro.components.operations import merge_datasets
+from datumaro.components.operations import merge_datasets, Comparator
 from .diff import DiffVisualizer
 from ...util import add_subparser, CliException, MultilineFormatter, \
     make_file_name

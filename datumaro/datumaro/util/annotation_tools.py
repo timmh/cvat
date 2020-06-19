@@ -82,6 +82,7 @@ def bbox_iou(bbox_a, bbox_b):
 def iou(a, b):
     """
     Generic IoU computation with masks, polygons, and boxes.
+    Returns -1 if no intersection, [0; 1] otherwise
     """
     try:
         from pycocotools.mask import iou as _iou
@@ -107,6 +108,6 @@ def iou(a, b):
                     return mask_utils.frPyObjects(mask_to_rle(ann.image), h, w)
             a = _to_rle(a)
             b = _to_rle(b)
-        return _iou(a, b, [not is_bbox])
+        return float(_iou(a, b, [not is_bbox]))
     except ImportError:
         return bbox_iou(a, b)
