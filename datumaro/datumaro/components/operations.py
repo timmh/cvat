@@ -163,51 +163,6 @@ def find_segment_clusters(sources, pairwise_iou=None, cluster_iou=None,
 
     return clusters
 
-class Comparator:
-    def __init__(self, iou_threshold=0.5, conf_threshold=0.9):
-        self.iou_threshold = iou_threshold
-        self.conf_threshold = conf_threshold
-
-    # pylint: disable=no-self-use
-    def compare_dataset_labels(self, extractor_a, extractor_b):
-        a_label_cat = extractor_a.categories().get(AnnotationType.label)
-        b_label_cat = extractor_b.categories().get(AnnotationType.label)
-        if not a_label_cat and not b_label_cat:
-            return None
-        if not a_label_cat:
-            a_label_cat = LabelCategories()
-        if not b_label_cat:
-            b_label_cat = LabelCategories()
-
-        mismatches = []
-        for a_label, b_label in zip_longest(a_label_cat.items, b_label_cat.items):
-            if a_label != b_label:
-                mismatches.append((a_label, b_label))
-        return mismatches
-    # pylint: enable=no-self-use
-
-    def compare_item_labels(self, item_a, item_b):
-        conf_threshold = self.conf_threshold
-
-        a_labels = set(ann.label for ann in item_a.annotations \
-            if ann.type is AnnotationType.label and \
-               conf_threshold < ann.attributes.get('score', 1))
-        b_labels = set(ann.label for ann in item_b.annotations \
-            if ann.type is AnnotationType.label and \
-               conf_threshold < ann.attributes.get('score', 1))
-
-        a_unmatched = a_labels - b_labels
-        b_unmatched = b_labels - a_labels
-        matches = a_labels & b_labels
-
-        return matches, a_unmatched, b_unmatched
-
-    def compare_item_bboxes(self, item_a, item_b):
-        a_boxes = get_segments(item_a.annotations, self.conf_threshold)
-        b_boxes = get_segments(item_b.annotations, self.conf_threshold)
-        return compare_segments(a_boxes, b_boxes,
-            iou_threshold=self.iou_threshold)
-
 def compare_segments(a_segms, b_segms, iou_threshold=1.0):
     a_segms.sort(key=lambda ann: 1 - ann.attributes.get('score', 1))
     b_segms.sort(key=lambda ann: 1 - ann.attributes.get('score', 1))
@@ -255,3 +210,48 @@ def compare_segments(a_segms, b_segms, iou_threshold=1.0):
     b_unmatched = [b_segms[i] for i, m in enumerate(b_matches) if m < 0]
 
     return matches, mispred, a_unmatched, b_unmatched
+
+class Comparator:
+    def __init__(self, iou_threshold=0.5, conf_threshold=0.9):
+        self.iou_threshold = iou_threshold
+        self.conf_threshold = conf_threshold
+
+    # pylint: disable=no-self-use
+    def compare_dataset_labels(self, extractor_a, extractor_b):
+        a_label_cat = extractor_a.categories().get(AnnotationType.label)
+        b_label_cat = extractor_b.categories().get(AnnotationType.label)
+        if not a_label_cat and not b_label_cat:
+            return None
+        if not a_label_cat:
+            a_label_cat = LabelCategories()
+        if not b_label_cat:
+            b_label_cat = LabelCategories()
+
+        mismatches = []
+        for a_label, b_label in zip_longest(a_label_cat.items, b_label_cat.items):
+            if a_label != b_label:
+                mismatches.append((a_label, b_label))
+        return mismatches
+    # pylint: enable=no-self-use
+
+    def compare_item_labels(self, item_a, item_b):
+        conf_threshold = self.conf_threshold
+
+        a_labels = set(ann.label for ann in item_a.annotations \
+            if ann.type is AnnotationType.label and \
+               conf_threshold < ann.attributes.get('score', 1))
+        b_labels = set(ann.label for ann in item_b.annotations \
+            if ann.type is AnnotationType.label and \
+               conf_threshold < ann.attributes.get('score', 1))
+
+        a_unmatched = a_labels - b_labels
+        b_unmatched = b_labels - a_labels
+        matches = a_labels & b_labels
+
+        return matches, a_unmatched, b_unmatched
+
+    def compare_item_bboxes(self, item_a, item_b):
+        a_boxes = get_segments(item_a.annotations, self.conf_threshold)
+        b_boxes = get_segments(item_b.annotations, self.conf_threshold)
+        return compare_segments(a_boxes, b_boxes,
+            iou_threshold=self.iou_threshold)
