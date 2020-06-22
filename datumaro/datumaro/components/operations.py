@@ -154,7 +154,7 @@ def find_segment_clusters(sources, pairwise_iou=None, cluster_iou=None,
                     continue
                 if 0 < cluster_iou and not _is_close_enough(cluster, i):
                     continue
-                if not allow_same_source and _has_same_source(cluster, i):
+                if _has_same_source(cluster, i):
                     continue
 
                 to_visit.add(i)
