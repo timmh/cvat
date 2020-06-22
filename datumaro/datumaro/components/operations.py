@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from functools import reduce
 from itertools import chain, zip_longest
 
 import numpy as np
@@ -25,7 +26,7 @@ def get_segments(anns, conf_threshold=1.0):
             ann.type in SEGMENT_TYPES
     ]
 
-def merge_annotations(a, b):
+def merge_annotations_unique(a, b):
     merged = []
     for item in chain(a, b):
         found = False
@@ -56,23 +57,36 @@ def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0):
     for item_a in sources[0]:
         items = [s.get(item_a.id, subset=item_a.subset) for s in sources[1:]]
 
-        annotations = merge_segments([item.annotations for item in items],
-            iou_threshold=iou_threshold, conf_threshold=conf_threshold)
-        annotations += merge_non_segments([item.annotations for item in items])
+        source_annotations = [a for item in items for a in item.annotations
+            if conf_threshold <= a.attributes.get('score', 1)]
+        annotations = merge_annotations_multi_match(source_annotations,
+            iou_threshold=iou_threshold)
         merged.put(item_a.wrap(image=Dataset._merge_images(item_a, item_b),
             annotations=annotations))
     return merged
 
-def merge_non_segments(sources):
-    annotations = []
+def merge_annotations_multi_match(sources, iou_threshold=None):
+    segments = [a for s in sources for a in s if a.type in SEGMENT_TYPES]
+    annotations = merge_segments(segments, iou_threshold=iou_threshold)
 
-    for s in sources:
-        non_segments = filter(lambda a: a.type not in SEGMENT_TYPES, s)
-        annotations = merge_annotations(annotations, non_segments)
+    non_segments = [a for s in sources for a in s if a.type not in SEGMENT_TYPES]
+    annotations += reduce(merge_annotations_unique, non_segments, [])
+
     return annotations
 
-def merge_segments(sources, iou_threshold=1.0, conf_threshold=1.0,
-        ignored_attributes=None):
+def merge_labels(sources):
+    votes = {} # label -> score
+    for s in chain(*sources):
+        for label_ann in s:
+            votes[label_ann.label] = 1.0 + votes.get(value, 0.0)
+
+    labels = {}
+    for name, votes in votes.items():
+        labels[name] = max(votes.items(), key=lambda e: e[1])[0]
+
+    return labels
+
+def merge_segments(sources, iou_threshold=1.0, ignored_attributes=None):
     ignored_attributes = ignored_attributes or set()
 
     clusters = find_segment_clusters(sources, pairwise_iou=iou_threshold)
