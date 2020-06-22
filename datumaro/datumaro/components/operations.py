@@ -49,23 +49,27 @@ def merge_categories(sources):
                     "Merging different categories is not implemented yet")
     return categories
 
-def merge_datasets(a, b, iou_threshold=1.0, conf_threshold=1.0):
+def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0):
     # TODO: put this function to the right place
     merged = Dataset(
-        categories=merge_categories([a.categories(), b.categories()]))
-    for item_a in a:
-        item_b = b.get(item_a.id, subset=item_a.subset)
+        categories=merge_categories([s.categories() for s in sources]))
+    for item_a in sources[0]:
+        items = [s.get(item_a.id, subset=item_a.subset) for s in sources[1:]]
 
-        annotations = merge_segments([item_a.annotations, item_b.annotations],
+        annotations = merge_segments([item.annotations for item in items],
             iou_threshold=iou_threshold, conf_threshold=conf_threshold)
-        a_non_segments = filter(lambda a: a.type not in SEGMENT_TYPES,
-            item_a.annotations)
-        b_non_segments = filter(lambda a: a.type not in SEGMENT_TYPES,
-            item_b.annotations)
-        annotations += merge_annotations(a_non_segments, b_non_segments)
+        annotations += merge_non_segments([item.annotations for item in items])
         merged.put(item_a.wrap(image=Dataset._merge_images(item_a, item_b),
             annotations=annotations))
     return merged
+
+def merge_non_segments(sources):
+    annotations = []
+
+    for s in sources:
+        non_segments = filter(lambda a: a.type not in SEGMENT_TYPES, s)
+        annotations = merge_annotations(annotations, non_segments)
+    return annotations
 
 def merge_segments(sources, iou_threshold=1.0, conf_threshold=1.0,
         ignored_attributes=None):
