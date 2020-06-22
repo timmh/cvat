@@ -9,6 +9,7 @@ import numpy as np
 
 from datumaro.components.extractor import AnnotationType, Bbox, LabelCategories
 from datumaro.components.project import Dataset
+from datumaro.util import find
 from datumaro.util.annotation_tools import compute_bbox, iou as segment_iou
 
 
@@ -66,22 +67,34 @@ def merge_datasets(a, b, iou_threshold=1.0, conf_threshold=1.0):
             annotations=annotations))
     return merged
 
-def merge_segments(sources, iou_threshold=1.0, conf_threshold=1.0):
+def merge_segments(sources, iou_threshold=1.0, conf_threshold=1.0,
+        ignored_attributes=None):
+    ignored_attributes = ignored_attributes or set()
+
     clusters = find_segment_clusters(sources, pairwise_iou=iou_threshold)
+    group_map = find_cluster_groups(clusters)
 
     merged = []
-    for cluster in clusters:
-        if len(cluster) == 1: # leave singular untouched
-            merged.extend(cluster)
-            continue
-
+    for cluster_id, cluster in enumerate(clusters):
         label, label_score = find_cluster_label(cluster)
         bbox = compute_bbox(cluster)
         segm_score = sum(max(0, segment_iou(Bbox(*bbox), s))
             for s in cluster) / len(cluster)
+
+        attributes = find_cluster_attrs(cluster)
+        attributes = { k: v for k, v in attributes.items()
+            if k not in ignored_attributes }
+
         score = label_score * segm_score
-        attributes = {'score': score} if label is not None else None
-        merged.append(Bbox(*bbox, label=label, attributes=attributes))
+        attributes['score'] = score if label is not None else None
+
+        group_id, cluster_group, ann_groups = find(enumerate(group_map),
+            lambda e: cluster_id in e[1][0])
+        if not ann_groups or len(cluster_group) == 1:
+            group_id = None
+
+        merged.append(Bbox(*bbox, label=label, group=group_id,
+            attributes=attributes))
     return merged
 
 def find_cluster_label(cluster):
@@ -92,15 +105,60 @@ def find_cluster_label(cluster):
             continue
 
         weight = s.attributes.get('score', 1.0)
-        label_votes[s.label] = weight + label_votes.get(s.label, 0)
+        label_votes[s.label] = weight + label_votes.get(s.label, 0.0)
         votes_count += 1
 
     label, score = max(label_votes.items(), key=lambda e: e[1], default=None)
     score = score / votes_count if votes_count else None
     return label, score
 
-def find_segment_clusters(sources, pairwise_iou=None, cluster_iou=None,
-        allow_same_source=True):
+def find_cluster_groups(clusters):
+    cluster_groups = []
+    visited = set()
+    for a_idx, cluster_a in enumerate(clusters):
+        if a_idx in visited:
+            continue
+        visited.add(a_idx)
+
+        cluster_group = { a_idx }
+
+        # find segment groups in the cluster group
+        a_groups = set(ann.group for ann in cluster_a)
+        for cluster_b in clusters[a_idx+1 :]:
+            b_groups = set(ann.group for ann in cluster_b)
+            if a_groups & b_groups:
+                a_groups |= b_groups
+
+        # now we know all the segment groups in this cluster group
+        # so we can find adjacent clusters
+        for b_idx, cluster_b in enumerate(clusters[a_idx+1 :]):
+            b_idx = a_idx + 1 + b_idx
+            b_groups = set(ann.group for ann in cluster_b)
+            if a_groups & b_groups:
+                cluster_group.add(b_idx)
+                visited.add(b_idx)
+
+        cluster_groups.append( (cluster_group, a_groups) )
+    return cluster_groups
+
+def find_cluster_attrs(cluster):
+    # TODO: when attribute types are implemented, add linear
+    # interpolation for contiguous values
+
+    attr_votes = {} # name -> { value: score , ... }
+    for s in cluster:
+        for name, value in s.attributes.items():
+            votes = attr_votes.get(name, {})
+            votes[value] = 1.0 + votes.get(value, 0.0)
+            attr_votes[name] = votes
+
+    attributes = {}
+    for name, votes in attr_votes.items():
+        attributes[name] = max(votes.items(), key=lambda e: e[1])[0]
+
+    return attributes
+
+def find_segment_clusters(sources, pairwise_iou=None, cluster_iou=None):
     if pairwise_iou is None: pairwise_iou = 0.9
     if cluster_iou is None: cluster_iou = pairwise_iou
 
