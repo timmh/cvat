@@ -143,7 +143,7 @@ def run_command(args):
             (project.config.project_name))
 
     project.make_dataset().apply_model(
-        save_dir=dst_dir,
+        save_dir=osp.abspath(dst_dir),
         model=args.model_name)
 
     log.info("Inference results have been saved to '%s'" % dst_dir)
