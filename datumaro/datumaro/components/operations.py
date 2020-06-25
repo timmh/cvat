@@ -14,6 +14,8 @@ def mean_std(dataset):
     # Use an online algorithm to:
     # - handle different image sizes
     # - avoid cancellation problem
+    if len(dataset) == 0:
+        return [0, 0, 0], [0, 0, 0]
 
     stats = np.empty((len(dataset), 2, 3), dtype=np.double)
     counts = np.empty(len(dataset), dtype=np.uint32)

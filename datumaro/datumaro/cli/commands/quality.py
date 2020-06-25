@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import json
 import logging as log
 import os
 import os.path as osp
@@ -11,9 +12,10 @@ import os.path as osp
 from datumaro.components.comparator import Comparator
 from datumaro.components.launcher import ModelTransform
 
+from ..contexts.project import compute_ann_statistics
 from ..contexts.project.diff import DiffVisualizer
 from ..util import CliException, MultilineFormatter
-from ..util.project import generate_next_dir_name, load_project
+from ..util.project import generate_next_file_name, load_project
 
 
 def build_parser(parser_ctor=argparse.ArgumentParser):
@@ -54,7 +56,7 @@ def quality_command(args):
             raise CliException("Directory '%s' already exists "
                 "(pass --overwrite to force creation)" % dst_dir)
     else:
-        dst_dir = generate_next_dir_name('%s-quality-report' % \
+        dst_dir = generate_next_file_name('%s-quality-report' % \
             project.config.project_name)
     dst_dir = osp.abspath(dst_dir)
 
@@ -78,41 +80,11 @@ def quality_command(args):
         output_format=args.format)
     visualizer.save_dataset_diff(inference, dataset)
 
-    statistics = compute_statistics(dataset)
-    save_statistics(dst_dir, statistics)
+    stats = compute_ann_statistics(dataset)
+    with open(generate_next_file_name(
+            'statistics', basedir=dst_dir, ext='.json'), 'w') as f:
+        json.dump(stats, f)
 
-    log.info("Dataset quality report is saved to '%s'" % dst_dir)
+    log.info("Dataset quality report saved to '%s'" % dst_dir)
 
     return 0
-
-def compute_statistics(dataset):
-    stats = {
-        'total images': len(dataset),
-        'total annotations': 0,
-        'annotations by type': {},
-        'unannotated images': [],
-    }
-    by_type = stats['annotations by type']
-
-    for item in dataset:
-        if len(item.annotations) == 0:
-            stats['unannotated images'].append(item.id)
-        else:
-            for ann in item.annotations:
-                by_type[ann.type.name] = by_type.get(ann.type.name, 0) + 1
-
-    stats['total annotations'] = sum(stats['annotations by type'].values())
-
-    return stats
-
-def save_statistics(dst_dir, statistics):
-    with open(osp.join(dst_dir, 'statistics.txt'), 'w') as f:
-        f.write('Total images: %s\n' % statistics['total images'])
-        f.write('Unannotated images: %s\n' % \
-            ', '.join(statistics['unannotated images']))
-        f.write('\n')
-        f.write('Total annotations: %s\n' % statistics['total annotations'])
-        f.write('by type:\n')
-        for t, c in statistics['annotations by type'].items():
-            f.write('  %s: %s\n' % (t, c))
-        f.close()

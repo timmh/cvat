@@ -5,6 +5,7 @@
 
 import argparse
 from enum import Enum
+import json
 import logging as log
 import os
 import os.path as osp
@@ -20,7 +21,7 @@ from datumaro.components.operations import mean_std
 from .diff import DiffVisualizer
 from ...util import add_subparser, CliException, MultilineFormatter, \
     make_file_name
-from ...util.project import load_project, generate_next_dir_name
+from ...util.project import load_project, generate_next_file_name
 
 
 def build_create_parser(parser_ctor=argparse.ArgumentParser):
@@ -329,7 +330,7 @@ def export_command(args):
             raise CliException("Directory '%s' already exists "
                 "(pass --overwrite to force creation)" % dst_dir)
     else:
-        dst_dir = generate_next_dir_name('%s-%s' % \
+        dst_dir = generate_next_file_name('%s-%s' % \
             (project.config.project_name, make_file_name(args.format)))
     dst_dir = osp.abspath(dst_dir)
 
@@ -425,7 +426,7 @@ def extract_command(args):
                 raise CliException("Directory '%s' already exists "
                     "(pass --overwrite to force creation)" % dst_dir)
         else:
-            dst_dir = generate_next_dir_name('%s-filter' % \
+            dst_dir = generate_next_file_name('%s-filter' % \
                 project.config.project_name)
         dst_dir = osp.abspath(dst_dir)
 
@@ -543,7 +544,7 @@ def diff_command(args):
             raise CliException("Directory '%s' already exists "
                 "(pass --overwrite to force creation)" % dst_dir)
     else:
-        dst_dir = generate_next_dir_name('%s-%s-diff' % (
+        dst_dir = generate_next_file_name('%s-%s-diff' % (
             first_project.config.project_name,
             second_project.config.project_name)
         )
@@ -597,7 +598,7 @@ def transform_command(args):
             raise CliException("Directory '%s' already exists "
                 "(pass --overwrite to force creation)" % dst_dir)
     else:
-        dst_dir = generate_next_dir_name('%s-%s' % \
+        dst_dir = generate_next_file_name('%s-%s' % \
             (project.config.project_name, make_file_name(args.transform)))
     dst_dir = osp.abspath(dst_dir)
 
@@ -627,7 +628,8 @@ def transform_command(args):
 def build_stats_parser(parser_ctor=argparse.ArgumentParser):
     parser = parser_ctor(help="Get project statistics",
         description="""
-            Outputs project statistics.
+            Outputs various project statistics like image mean and std,
+            annotations count etc.
         """,
         formatter_class=MultilineFormatter)
 
@@ -639,22 +641,66 @@ def build_stats_parser(parser_ctor=argparse.ArgumentParser):
 
 def stats_command(args):
     project = load_project(args.project_dir)
+
     dataset = project.make_dataset()
+    stats = compute_image_statistics(dataset)
+    stats.update(compute_ann_statistics(dataset))
 
-    def print_extractor_info(extractor, indent=''):
-        mean, std = mean_std(dataset)
-        print("%sImage mean:" % indent, ', '.join('%.3f' % n for n in mean))
-        print("%sImage std:" % indent, ', '.join('%.3f' % n for n in std))
+    dst_file = generate_next_file_name('statistics', ext='.json')
+    log.info("Writing project statistics to '%s'" % dst_file)
+    with open(dst_file, 'w') as f:
+        json.dump(stats, f)
 
-    print("Dataset: ")
-    print_extractor_info(dataset)
+def compute_image_statistics(dataset):
+    stats = {
+        'dataset': {},
+        'subsets': {}
+    }
 
-    if 1 < len(dataset.subsets()):
-        print("Subsets: ")
-        for subset_name in dataset.subsets():
-            subset = dataset.get_subset(subset_name)
-            print("  %s:" % subset_name)
-            print_extractor_info(subset, " " * 4)
+    def _extractor_stats(extractor):
+        mean, std = mean_std(extractor)
+        return {
+            'Total images': len(extractor),
+            'Image mean': ['%.3f' % n for n in mean],
+            'Image std': ['%.3f' % n for n in std],
+        }
+
+    stats['dataset'].update(_extractor_stats(dataset))
+
+    subsets = dataset.subsets() or [None]
+    if subsets and 0 < len([s for s in subsets if s]):
+        for subset_name in subsets:
+            stats['subsets'][subset_name] = _extractor_stats(
+                dataset.get_subset(subset_name))
+
+    return stats
+
+def compute_ann_statistics(dataset):
+    stats = {
+        'Total images': len(dataset),
+        'Total annotations': 0,
+        'Annotations by type': {},
+        'Annotations by attribute': {},
+        'Unannotated images': [],
+    }
+    by_type = stats['Annotations by type']
+    by_attr = stats['Annotations by attribute']
+
+    for item in dataset:
+        if len(item.annotations) == 0:
+            stats['Unannotated images'].append(item.id)
+        else:
+            for ann in item.annotations:
+                by_type[ann.type.name] = by_type.get(ann.type.name, 0) + 1
+
+                for name, value in ann.attributes.items():
+                    by_val = by_attr.get(name, {})
+                    by_val[str(value)] = by_val.get(str(value), 0) + 1
+                    by_attr[name] = by_val
+
+    stats['Total annotations'] = sum(stats['Annotations by type'].values())
+
+    return stats
 
 def build_info_parser(parser_ctor=argparse.ArgumentParser):
     parser = parser_ctor(help="Get project info",
