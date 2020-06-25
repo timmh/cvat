@@ -7,14 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0-alpha] - Unreleased
 ### Added
 - Throttling policy for unauthenticated users (<https://github.com/opencv/cvat/pull/1531>)
-- Added default label color table for mask export (https://github.com/opencv/cvat/pull/1549)
+- Added default label color table for mask export (<https://github.com/opencv/cvat/pull/1549>)
 - Added environment variables for Redis and Postgres hosts for Kubernetes deployment support (<https://github.com/opencv/cvat/pull/1641>)
-- Added visual identification for unavailable formats (https://github.com/opencv/cvat/pull/1567)
-- (Datumaro) Dataset quality estimation with a model (https://github.com/opencv/cvat/pull/1668)
+- Added visual identification for unavailable formats (<https://github.com/opencv/cvat/pull/1567>)
+- Shortcut to change color of an activated shape in new UI (Enter) (<https://github.com/opencv/cvat/pull/1683>)
+- Shortcut to switch split mode (<https://github.com/opencv/cvat/pull/1683>)
+- Built-in search for labels when create an object or change a label (<https://github.com/opencv/cvat/pull/1683>)
+- Better validation of labels and attributes in raw viewer (<https://github.com/opencv/cvat/pull/1727>)
+- ClamAV antivirus integration (<https://github.com/opencv/cvat/pull/1712>)
+- SCSS files linting with Stylelint tool (<https://github.com/opencv/cvat/pull/1766>)
+- Supported import and export or single boxes in MOT format (https://github.com/opencv/cvat/pull/1764)
+- [Datumaro] Added `stats` command, which shows some dataset statistics like image mean and std (https://github.com/opencv/cvat/pull/1734)
+- Add option to upload annotations upon task creation on CLI
+- Polygon and polylines interpolation (<https://github.com/opencv/cvat/pull/1571>)
+- Ability to redraw shape from scratch (Shift + N) for an activated shape (<https://github.com/opencv/cvat/pull/1571>)
+- Highlights for the first point of a polygon/polyline and direction (<https://github.com/opencv/cvat/pull/1571>)
+- Ability to change orientation for poylgons/polylines in context menu (<https://github.com/opencv/cvat/pull/1571>)
+- Ability to set the first point for polygons in points context menu (<https://github.com/opencv/cvat/pull/1571>)
+- [Datumaro] Dataset quality estimation with a model (https://github.com/opencv/cvat/pull/1668)
 
 ### Changed
 - Removed information about e-mail from the basic user information (<https://github.com/opencv/cvat/pull/1627>)
 - Update https install manual. Makes it easier and more robust. Includes automatic renewing of lets encrypt certificates.
+- Implemented import and export of annotations with relative image paths (<https://github.com/opencv/cvat/pull/1463>)
+- Using only single click to start editing or remove a point (<https://github.com/opencv/cvat/pull/1571>)
 
 ### Deprecated
 -
@@ -23,15 +39,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 -
 
 ### Fixed
-- Fixed dataset filter item representation for imageless dataset items (https://github.com/opencv/cvat/pull/1593)
-- Fixed interpreter crash when trying to import `tensorflow` with no AVX instructions available (https://github.com/opencv/cvat/pull/1567)
+- Problem with exported frame stepped image task (<https://github.com/opencv/cvat/issues/1613>)
+- Fixed dataset filter item representation for imageless dataset items (<https://github.com/opencv/cvat/pull/1593>)
+- Fixed interpreter crash when trying to import `tensorflow` with no AVX instructions available (<https://github.com/opencv/cvat/pull/1567>)
 - Kibana wrong working time calculation with new annotation UI use (<https://github.com/opencv/cvat/pull/1654>)
 - Wrong rexex for account name validation (<https://github.com/opencv/cvat/pull/1667>)
 - Wrong description on register view for the username field (<https://github.com/opencv/cvat/pull/1667>)
 - Wrong resolution for resizing a shape (<https://github.com/opencv/cvat/pull/1667>)
+- React warning because of not unique keys in labels viewer (<https://github.com/opencv/cvat/pull/1727>)
+- A couple of exceptions in AAM related with early object activation (<https://github.com/opencv/cvat/pull/1755>)
+- Propagation from the latest frame (<https://github.com/opencv/cvat/pull/1800>)
+- Number attribute value validation (didn't work well with floats) (<https://github.com/opencv/cvat/pull/1800>)
+
 
 ### Security
-- SQL injection in Django `CVE-2020-9402` (https://github.com/opencv/cvat/pull/1657)
+- SQL injection in Django `CVE-2020-9402` (<https://github.com/opencv/cvat/pull/1657>)
 
 ## [1.0.0] - 2020-05-29
 ### Added
@@ -83,6 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A problem with mask to polygons conversion when polygons are too small (<https://github.com/opencv/cvat/pull/1581>)
 - Unable to upload video with uneven size (<https://github.com/opencv/cvat/pull/1594>)
 - Fixed an issue with `z_order` having no effect on segmentations (<https://github.com/opencv/cvat/pull/1589>)
+
+### Security
 - Permission group whitelist check for analytics view (<https://github.com/opencv/cvat/pull/1608>)
 
 ## [1.0.0-beta.2] - 2020-04-30
