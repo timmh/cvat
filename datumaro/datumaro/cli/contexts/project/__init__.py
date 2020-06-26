@@ -450,13 +450,11 @@ def extract_command(args):
 
     return 0
 
-MergeStrategy = Enum('MergeStrategy', ['merge', 'update'])
-
 def build_merge_parser(parser_ctor=argparse.ArgumentParser):
-    parser = parser_ctor(help="Merge projects",
+    parser = parser_ctor(help="Merge two projects",
         description="""
             Updates items of the current project with items
-            from the other project.|n
+            from other project.|n
             |n
             Examples:|n
             - Update a project with items from other project:|n
@@ -464,17 +462,8 @@ def build_merge_parser(parser_ctor=argparse.ArgumentParser):
         """,
         formatter_class=MultilineFormatter)
 
-    parser.add_argument('other_project_dir',
-        help="Directory of the project to get data updates from")
-    parser.add_argument('-s', '--strategy',
-        type=MergeStrategy, default=MergeStrategy.merge,
-        help="Merging strategy (options: %s; default: %s)" % \
-            (', '.join(map(str, MergeStrategy)), '%(default)s')
-    )
-    parser.add_argument('--iou-thresh', default=0.5, type=float,
-        help="IoU match threshold for detections (default: %(default)s)")
-    parser.add_argument('--conf-thresh', default=0.5, type=float,
-        help="Confidence threshold for detections (default: %(default)s)")
+    parser.add_argument('other_project',
+        help="Path to a project")
     parser.add_argument('-o', '--output-dir', dest='dst_dir', default=None,
         help="Output directory (default: current project's dir)")
     parser.add_argument('--overwrite', action='store_true',
@@ -494,26 +483,15 @@ def merge_command(args):
         if not args.overwrite and osp.isdir(dst_dir) and os.listdir(dst_dir):
             raise CliException("Directory '%s' already exists "
                 "(pass --overwrite to overwrite)" % dst_dir)
-    elif args.strategy == MergeStrategy.merge:
-        dst_dir = generate_next_dir_name('merged-project')
 
     first_dataset = first_project.make_dataset()
     second_dataset = second_project.make_dataset()
 
-    if args.strategy == MergeStrategy.update:
-        first_dataset.update(second_dataset)
-        merged_dataset = first_dataset
-    elif args.strategy == MergeStrategy.merge:
-        merged_dataset = merge_datasets(first_dataset, second_dataset,
-            iou_threshold=args.iou_thresh, conf_threshold=args.conf_thresh)
-        merged_project = Project()
-        output_dataset = merged_project.make_dataset()
-        output_dataset.define_categories(merged_dataset.categories())
-        merged_dataset = output_dataset.update(merged_dataset)
-    merged_dataset.save(save_dir=dst_dir)
+    first_dataset.update(second_dataset)
+    first_dataset.save(save_dir=dst_dir)
 
     if dst_dir is None:
-        dst_dir = merged_project.config.project_dir
+        dst_dir = first_project.config.project_dir
     dst_dir = osp.abspath(dst_dir)
     log.info("Merge results have been saved to '%s'" % dst_dir)
 
