@@ -17,7 +17,8 @@ from datumaro.components.comparator import Comparator
 from datumaro.components.dataset_filter import DatasetItemEncoder
 from datumaro.components.extractor import AnnotationType
 from datumaro.components.cli_plugin import CliPlugin
-from datumaro.components.operations import mean_std
+from datumaro.components.operations import \
+    compute_image_statistics, compute_ann_statistics
 from .diff import DiffVisualizer
 from ...util import add_subparser, CliException, MultilineFormatter, \
     make_file_name
@@ -650,57 +651,6 @@ def stats_command(args):
     log.info("Writing project statistics to '%s'" % dst_file)
     with open(dst_file, 'w') as f:
         json.dump(stats, f)
-
-def compute_image_statistics(dataset):
-    stats = {
-        'dataset': {},
-        'subsets': {}
-    }
-
-    def _extractor_stats(extractor):
-        mean, std = mean_std(extractor)
-        return {
-            'Total images': len(extractor),
-            'Image mean': ['%.3f' % n for n in mean],
-            'Image std': ['%.3f' % n for n in std],
-        }
-
-    stats['dataset'].update(_extractor_stats(dataset))
-
-    subsets = dataset.subsets() or [None]
-    if subsets and 0 < len([s for s in subsets if s]):
-        for subset_name in subsets:
-            stats['subsets'][subset_name] = _extractor_stats(
-                dataset.get_subset(subset_name))
-
-    return stats
-
-def compute_ann_statistics(dataset):
-    stats = {
-        'Total images': len(dataset),
-        'Total annotations': 0,
-        'Annotations by type': {},
-        'Annotations by attribute': {},
-        'Unannotated images': [],
-    }
-    by_type = stats['Annotations by type']
-    by_attr = stats['Annotations by attribute']
-
-    for item in dataset:
-        if len(item.annotations) == 0:
-            stats['Unannotated images'].append(item.id)
-        else:
-            for ann in item.annotations:
-                by_type[ann.type.name] = by_type.get(ann.type.name, 0) + 1
-
-                for name, value in ann.attributes.items():
-                    by_val = by_attr.get(name, {})
-                    by_val[str(value)] = by_val.get(str(value), 0) + 1
-                    by_attr[name] = by_val
-
-    stats['Total annotations'] = sum(stats['Annotations by type'].values())
-
-    return stats
 
 def build_info_parser(parser_ctor=argparse.ArgumentParser):
     parser = parser_ctor(help="Get project info",
