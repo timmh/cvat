@@ -7,6 +7,7 @@ from functools import reduce
 from itertools import chain, zip_longest
 
 import cv2
+import logging as log
 import numpy as np
 
 from datumaro.components.extractor import AnnotationType, Bbox, LabelCategories
@@ -51,33 +52,49 @@ def merge_categories(sources):
     return categories
 
 def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0,
-        output_conf_thresh=0.0):
+        output_conf_thresh=0.0, consensus=0, ignored_attributes=None):
     # TODO: put this function to the right place
     merged = Dataset(
         categories=merge_categories([s.categories() for s in sources]))
-    for item_a in sources[0]:
-        items = [s.get(item_a.id, subset=item_a.subset) for s in sources[1:]]
 
-        source_annotations = [a for item in items for a in item.annotations
-            if conf_threshold <= a.attributes.get('score', 1)]
+    item_ids = set()
+    for s in sources:
+        item_ids.update((item.id, item.subset) for item in s)
+
+    for (item_id, item_subset) in item_ids:
+        items = []
+        for i, s in enumerate(sources):
+            try:
+                items.append(s.get(item_id, subset=item_subset))
+            except KeyError:
+                log.debug("Source #%s doesn't have item '%s' in subset '%s'",
+                    1 + i + 1, item_id, item_subset)
+
+        source_annotations = [[a for a in item.annotations
+            if conf_threshold <= a.attributes.get('score', 1)
+            ] for item in items]
         annotations = merge_annotations_multi_match(source_annotations,
-            iou_threshold=iou_threshold)
+            iou_threshold=iou_threshold, consensus=consensus,
+            ignored_attributes=ignored_attributes)
         annotations = [a for a in annotations
             if output_conf_thresh <= a.attributes.get('score', 1)]
-        merged.put(item_a.wrap(image=Dataset._merge_images(item_a, item_b),
-            annotations=annotations))
+        merged.put(items[0].wrap(annotations=annotations))
     return merged
 
-def merge_annotations_multi_match(sources, iou_threshold=None):
-    segments = [a for s in sources for a in s if a.type in SEGMENT_TYPES]
-    annotations = merge_segments(segments, iou_threshold=iou_threshold)
+def merge_annotations_multi_match(sources, iou_threshold=None,
+        consensus=None, ignored_attributes=None):
+    segments = [[a for a in s if a.type in SEGMENT_TYPES] for s in sources]
+    annotations = merge_segments(segments,
+        iou_threshold=iou_threshold, consensus=consensus,
+        ignored_attributes=ignored_attributes)
 
-    non_segments = [a for s in sources for a in s if a.type not in SEGMENT_TYPES]
+    non_segments = [[a for a in s if a.type not in SEGMENT_TYPES]
+        for s in sources]
     annotations += reduce(merge_annotations_unique, non_segments, [])
 
     return annotations
 
-def merge_labels(sources):
+def merge_labels(sources, consensus=None):
     votes = {} # label -> score
     for s in chain(*sources):
         for label_ann in s:
@@ -89,7 +106,8 @@ def merge_labels(sources):
 
     return labels
 
-def merge_segments(sources, iou_threshold=1.0, ignored_attributes=None):
+def merge_segments(sources, iou_threshold=1.0,
+        ignored_attributes=None, consensus=None):
     ignored_attributes = ignored_attributes or set()
 
     clusters = find_segment_clusters(sources, pairwise_iou=iou_threshold)
@@ -97,19 +115,19 @@ def merge_segments(sources, iou_threshold=1.0, ignored_attributes=None):
 
     merged = []
     for cluster_id, cluster in enumerate(clusters):
-        label, label_score = find_cluster_label(cluster)
+        label, label_score = find_cluster_label(cluster, consensus=consensus)
         bbox = compute_bbox(cluster)
         segm_score = sum(max(0, segment_iou(Bbox(*bbox), s))
             for s in cluster) / len(cluster)
 
-        attributes = find_cluster_attrs(cluster)
+        attributes = find_cluster_attrs(cluster, consensus=consensus)
         attributes = { k: v for k, v in attributes.items()
             if k not in ignored_attributes }
 
         score = label_score * segm_score
         attributes['score'] = score if label is not None else None
 
-        group_id, cluster_group, ann_groups = find(enumerate(group_map),
+        group_id, (cluster_group, ann_groups) = find(enumerate(group_map),
             lambda e: cluster_id in e[1][0])
         if not ann_groups or len(cluster_group) == 1:
             group_id = None
@@ -118,7 +136,9 @@ def merge_segments(sources, iou_threshold=1.0, ignored_attributes=None):
             attributes=attributes))
     return merged
 
-def find_cluster_label(cluster):
+def find_cluster_label(cluster, consensus=None):
+    consensus = consensus or 0
+
     label_votes = {}
     votes_count = 0
     for s in cluster:
@@ -128,6 +148,9 @@ def find_cluster_label(cluster):
         weight = s.attributes.get('score', 1.0)
         label_votes[s.label] = weight + label_votes.get(s.label, 0.0)
         votes_count += 1
+
+    if votes_count < consensus:
+        return None, None
 
     label, score = max(label_votes.items(), key=lambda e: e[1], default=None)
     score = score / votes_count if votes_count else None
@@ -162,7 +185,9 @@ def find_cluster_groups(clusters):
         cluster_groups.append( (cluster_group, a_groups) )
     return cluster_groups
 
-def find_cluster_attrs(cluster):
+def find_cluster_attrs(cluster, consensus=None):
+    consensus = consensus or 0
+
     # TODO: when attribute types are implemented, add linear
     # interpolation for contiguous values
 
@@ -175,7 +200,10 @@ def find_cluster_attrs(cluster):
 
     attributes = {}
     for name, votes in attr_votes.items():
-        attributes[name] = max(votes.items(), key=lambda e: e[1])[0]
+        vote, count = max(votes.items(), key=lambda e: e[1])
+        if count < consensus:
+            continue
+        attributes[name] = vote
 
     return attributes
 

@@ -4,6 +4,8 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import logging as log
+import os.path as osp
 
 from datumaro.components.project import Project
 from datumaro.components.operations import merge_datasets
@@ -37,6 +39,9 @@ def build_parser(parser_ctor=argparse.ArgumentParser):
     parser.add_argument('--output-conf-thresh', default=0.0, type=float,
         help="Confidence threshold for output "
             "annotations (default: %(default)s)")
+    parser.add_argument('--consensus', default=0,
+        help="Minimum count for a label and attribute voting "
+            "results to be counted (default: %(default)s)")
     parser.add_argument('-o', '--output-dir', dest='dst_dir', default=None,
         help="Output directory (default: current project's dir)")
     parser.add_argument('--overwrite', action='store_true',
@@ -54,16 +59,17 @@ def merge_command(args):
             raise CliException("Directory '%s' already exists "
                 "(pass --overwrite to overwrite)" % dst_dir)
     else:
-        dst_dir = generate_next_dir_name('merged-project')
+        dst_dir = generate_next_dir_name('merged')
 
     source_datasets = []
     for p in source_projects:
-        log.debug("Loading project '%s' dataset" % p.config.project_name)
+        log.debug("Loading project '%s' dataset", p.config.project_name)
         source_datasets.append(p.make_dataset())
 
     merged_dataset = merge_datasets(source_datasets,
         iou_threshold=args.iou_thresh, conf_threshold=args.input_conf_thresh,
-        output_conf_thresh=args.output_conf_thresh)
+        output_conf_thresh=args.output_conf_thresh,
+        consensus=args.consensus)
 
     merged_project = Project()
     output_dataset = merged_project.make_dataset()
