@@ -50,7 +50,8 @@ def merge_categories(sources):
                     "Merging different categories is not implemented yet")
     return categories
 
-def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0):
+def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0,
+        output_conf_thresh=0.0):
     # TODO: put this function to the right place
     merged = Dataset(
         categories=merge_categories([s.categories() for s in sources]))
@@ -61,6 +62,8 @@ def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0):
             if conf_threshold <= a.attributes.get('score', 1)]
         annotations = merge_annotations_multi_match(source_annotations,
             iou_threshold=iou_threshold)
+        annotations = [a for a in annotations
+            if output_conf_thresh <= a.attributes.get('score', 1)]
         merged.put(item_a.wrap(image=Dataset._merge_images(item_a, item_b),
             annotations=annotations))
     return merged
