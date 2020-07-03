@@ -21,7 +21,7 @@ SEGMENT_TYPES = {
     AnnotationType.mask
 }
 
-def get_segments(anns, conf_threshold=1.0):
+def get_segments(anns, conf_threshold=0.0):
     return [ann for ann in anns \
         if conf_threshold <= ann.attributes.get('score', 1) and \
             ann.type in SEGMENT_TYPES
