@@ -36,20 +36,20 @@ def compute_bbox(annotations):
 def softmax(x):
     return np.exp(x) / sum(np.exp(x))
 
-def nms(boxes, iou_thresh=0.5):
+def nms(segments, iou_thresh=0.5):
     """
     Non-maxima suppression algorithm.
     """
 
-    indices = np.argsort([b.attributes['score'] for b in boxes])
-    ious = np.array([[a.iou(b) for b in boxes] for a in boxes])
+    indices = np.argsort([b.attributes['score'] for b in segments])
+    ious = np.array([[iou(a, b) for b in segments] for a in segments])
 
     predictions = []
     while len(indices) != 0:
         i = len(indices) - 1
         pred_idx = indices[i]
         to_remove = [i]
-        predictions.append(boxes[pred_idx])
+        predictions.append(segments[pred_idx])
         for i, box_idx in enumerate(indices[:i]):
             if iou_thresh < ious[pred_idx, box_idx]:
                 to_remove.append(i)

@@ -31,15 +31,19 @@ def build_parser(parser_ctor=argparse.ArgumentParser):
 
     parser.add_argument('project', nargs='+', action=at_least(2),
         help="Path to a project (repeatable)")
-    parser.add_argument('--iou-thresh', default=0.75, type=float,
-        help="IoU match threshold for detections (default: %(default)s)")
-    parser.add_argument('--input-conf-thresh', default=0.5, type=float,
+    parser.add_argument('-iou', '--iou-thresh', default=0.5, type=float,
+        help="IoU match threshold for segments (default: %(default)s)")
+    parser.add_argument('-nms', action='store_true',
+        help="Run non-maxima suppression algorithm prior to merging")
+    parser.add_argument('-iconf', '--input-conf-thresh',
+        default=0.25, type=float,
         help="Confidence threshold for input "
             "annotations (default: %(default)s)")
-    parser.add_argument('--output-conf-thresh', default=0.0, type=float,
+    parser.add_argument('-oconf', '--output-conf-thresh',
+        default=0.0, type=float,
         help="Confidence threshold for output "
             "annotations (default: %(default)s)")
-    parser.add_argument('--consensus', default=0,
+    parser.add_argument('--consensus', default=0, type=int,
         help="Minimum count for a label and attribute voting "
             "results to be counted (default: %(default)s)")
     parser.add_argument('-o', '--output-dir', dest='dst_dir', default=None,
@@ -69,7 +73,7 @@ def merge_command(args):
     merged_dataset = merge_datasets(source_datasets,
         iou_threshold=args.iou_thresh, conf_threshold=args.input_conf_thresh,
         output_conf_thresh=args.output_conf_thresh,
-        consensus=args.consensus)
+        consensus=args.consensus, do_nms=args.nms)
 
     merged_project = Project()
     output_dataset = merged_project.make_dataset()

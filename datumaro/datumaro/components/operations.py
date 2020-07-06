@@ -13,7 +13,7 @@ import numpy as np
 from datumaro.components.extractor import AnnotationType, Bbox, LabelCategories
 from datumaro.components.project import Dataset
 from datumaro.util import find
-from datumaro.util.annotation_tools import compute_bbox, iou as segment_iou
+from datumaro.util.annotation_tools import compute_bbox, iou as segment_iou, nms
 
 SEGMENT_TYPES = {
     AnnotationType.bbox,
@@ -52,7 +52,8 @@ def merge_categories(sources):
     return categories
 
 def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0,
-        output_conf_thresh=0.0, consensus=0, ignored_attributes=None):
+        output_conf_thresh=0.0, consensus=0,
+        ignored_attributes=None, do_nms=False):
     # TODO: put this function to the right place
     merged = Dataset(
         categories=merge_categories([s.categories() for s in sources]))
@@ -73,6 +74,8 @@ def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0,
         source_annotations = [[a for a in item.annotations
             if conf_threshold <= a.attributes.get('score', 1)
             ] for item in items]
+        if do_nms:
+            source_annotations = list(map(nms, source_annotations))
         annotations = merge_annotations_multi_match(source_annotations,
             iou_threshold=iou_threshold, consensus=consensus,
             ignored_attributes=ignored_attributes)
@@ -124,8 +127,8 @@ def merge_segments(sources, iou_threshold=1.0,
         attributes = { k: v for k, v in attributes.items()
             if k not in ignored_attributes }
 
-        score = label_score * segm_score
-        attributes['score'] = score if label is not None else None
+        score = label_score * segm_score if label is not None else segm_score
+        attributes['score'] = score
 
         group_id, (cluster_group, ann_groups) = find(enumerate(group_map),
             lambda e: cluster_id in e[1][0])
