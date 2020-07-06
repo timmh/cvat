@@ -86,9 +86,6 @@ def add_command(args):
     })
     project.make_executable_model(args.name)
 
-    log.info("Checking the model")
-    project.make_executable_model(args.name)
-
     project.save()
 
     log.info("Model '%s' with launcher '%s' has been added to project '%s'" % \
