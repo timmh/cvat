@@ -52,7 +52,7 @@ def merge_categories(sources):
     return categories
 
 def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0,
-        output_conf_thresh=0.0, consensus=0,
+        output_conf_thresh=0.0, quorum=0,
         ignored_attributes=None, do_nms=False):
     # TODO: put this function to the right place
     merged = Dataset(
@@ -77,7 +77,7 @@ def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0,
         if do_nms:
             source_annotations = list(map(nms, source_annotations))
         annotations = merge_annotations_multi_match(source_annotations,
-            iou_threshold=iou_threshold, consensus=consensus,
+            iou_threshold=iou_threshold, quorum=quorum,
             ignored_attributes=ignored_attributes)
         annotations = [a for a in annotations
             if output_conf_thresh <= a.attributes.get('score', 1)]
@@ -85,10 +85,10 @@ def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0,
     return merged
 
 def merge_annotations_multi_match(sources, iou_threshold=None,
-        consensus=None, ignored_attributes=None):
+        quorum=None, ignored_attributes=None):
     segments = [[a for a in s if a.type in SEGMENT_TYPES] for s in sources]
     annotations = merge_segments(segments,
-        iou_threshold=iou_threshold, consensus=consensus,
+        iou_threshold=iou_threshold, quorum=quorum,
         ignored_attributes=ignored_attributes)
 
     non_segments = [[a for a in s if a.type not in SEGMENT_TYPES]
@@ -97,7 +97,7 @@ def merge_annotations_multi_match(sources, iou_threshold=None,
 
     return annotations
 
-def merge_labels(sources, consensus=None):
+def merge_labels(sources, quorum=None):
     votes = {} # label -> score
     for s in chain(*sources):
         for label_ann in s:
@@ -110,7 +110,7 @@ def merge_labels(sources, consensus=None):
     return labels
 
 def merge_segments(sources, iou_threshold=1.0,
-        ignored_attributes=None, consensus=None):
+        ignored_attributes=None, quorum=None):
     ignored_attributes = ignored_attributes or set()
 
     clusters = find_segment_clusters(sources, pairwise_iou=iou_threshold)
@@ -118,12 +118,12 @@ def merge_segments(sources, iou_threshold=1.0,
 
     merged = []
     for cluster_id, cluster in enumerate(clusters):
-        label, label_score = find_cluster_label(cluster, consensus=consensus)
+        label, label_score = find_cluster_label(cluster, quorum=quorum)
         bbox = compute_bbox(cluster)
         segm_score = sum(max(0, segment_iou(Bbox(*bbox), s))
             for s in cluster) / len(cluster)
 
-        attributes = find_cluster_attrs(cluster, consensus=consensus)
+        attributes = find_cluster_attrs(cluster, quorum=quorum)
         attributes = { k: v for k, v in attributes.items()
             if k not in ignored_attributes }
 
@@ -139,8 +139,8 @@ def merge_segments(sources, iou_threshold=1.0,
             attributes=attributes))
     return merged
 
-def find_cluster_label(cluster, consensus=None):
-    consensus = consensus or 0
+def find_cluster_label(cluster, quorum=None):
+    quorum = quorum or 0
 
     label_votes = {}
     votes_count = 0
@@ -152,7 +152,7 @@ def find_cluster_label(cluster, consensus=None):
         label_votes[s.label] = weight + label_votes.get(s.label, 0.0)
         votes_count += 1
 
-    if votes_count < consensus:
+    if votes_count < quorum:
         return None, None
 
     label, score = max(label_votes.items(), key=lambda e: e[1], default=None)
@@ -188,8 +188,8 @@ def find_cluster_groups(clusters):
         cluster_groups.append( (cluster_group, a_groups) )
     return cluster_groups
 
-def find_cluster_attrs(cluster, consensus=None):
-    consensus = consensus or 0
+def find_cluster_attrs(cluster, quorum=None):
+    quorum = quorum or 0
 
     # TODO: when attribute types are implemented, add linear
     # interpolation for contiguous values
@@ -204,7 +204,7 @@ def find_cluster_attrs(cluster, consensus=None):
     attributes = {}
     for name, votes in attr_votes.items():
         vote, count = max(votes.items(), key=lambda e: e[1])
-        if count < consensus:
+        if count < quorum:
             continue
         attributes[name] = vote
 

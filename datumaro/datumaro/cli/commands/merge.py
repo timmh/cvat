@@ -43,7 +43,7 @@ def build_parser(parser_ctor=argparse.ArgumentParser):
         default=0.0, type=float,
         help="Confidence threshold for output "
             "annotations (default: %(default)s)")
-    parser.add_argument('--consensus', default=0, type=int,
+    parser.add_argument('--quorum', default=0, type=int,
         help="Minimum count for a label and attribute voting "
             "results to be counted (default: %(default)s)")
     parser.add_argument('-o', '--output-dir', dest='dst_dir', default=None,
@@ -73,7 +73,7 @@ def merge_command(args):
     merged_dataset = merge_datasets(source_datasets,
         iou_threshold=args.iou_thresh, conf_threshold=args.input_conf_thresh,
         output_conf_thresh=args.output_conf_thresh,
-        consensus=args.consensus, do_nms=args.nms)
+        quorum=args.quorum, do_nms=args.nms)
 
     merged_project = Project()
     output_dataset = merged_project.make_dataset()
