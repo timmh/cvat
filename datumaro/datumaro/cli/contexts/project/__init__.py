@@ -15,7 +15,7 @@ from datumaro.components.project import Project, Environment, \
 from datumaro.components.dataset_filter import DatasetItemEncoder
 from datumaro.components.extractor import AnnotationType
 from datumaro.components.cli_plugin import CliPlugin
-from datumaro.components.operations import merge_datasets, Comparator, mean_std
+from datumaro.components.operations import Comparator, mean_std
 from .diff import DiffVisualizer
 from ...util import add_subparser, CliException, MultilineFormatter, \
     make_file_name

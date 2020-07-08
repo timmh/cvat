@@ -8,7 +8,7 @@ import logging as log
 import os.path as osp
 
 from datumaro.components.project import Project
-from datumaro.components.operations import merge_datasets
+from datumaro.components.operations import IntersectMerge
 
 from ..util import at_least, MultilineFormatter, CliException
 from ..util.project import generate_next_dir_name, load_project
@@ -70,8 +70,8 @@ def merge_command(args):
         log.debug("Loading project '%s' dataset", p.config.project_name)
         source_datasets.append(p.make_dataset())
 
-    merged_dataset = merge_datasets(source_datasets,
-        iou_threshold=args.iou_thresh, conf_threshold=args.input_conf_thresh,
+    merged_dataset = IntersectMerge.merge(source_datasets,
+        iou_thresh=args.iou_thresh, input_conf_thresh=args.input_conf_thresh,
         output_conf_thresh=args.output_conf_thresh,
         quorum=args.quorum, do_nms=args.nms)
 

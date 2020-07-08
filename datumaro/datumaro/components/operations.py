@@ -3,13 +3,15 @@
 #
 # SPDX-License-Identifier: MIT
 
+import logging as log
 from functools import reduce
 from itertools import chain, zip_longest
 
 import cv2
-import logging as log
 import numpy as np
 
+from datumaro.components.cli_plugin import CliPlugin
+from datumaro.components.config import Config, SchemaBuilder
 from datumaro.components.extractor import AnnotationType, Bbox, LabelCategories
 from datumaro.components.project import Dataset
 from datumaro.util import find
@@ -51,81 +53,118 @@ def merge_categories(sources):
                     "Merging different categories is not implemented yet")
     return categories
 
-def merge_datasets(sources, iou_threshold=1.0, conf_threshold=1.0,
-        output_conf_thresh=0.0, quorum=0,
-        ignored_attributes=None, do_nms=False):
-    # TODO: put this function to the right place
-    merged = Dataset(
-        categories=merge_categories([s.categories() for s in sources]))
 
-    item_ids = set()
-    for s in sources:
-        item_ids.update((item.id, item.subset) for item in s)
+class MergingStrategy(CliPlugin):
+    @classmethod
+    def merge(cls, sources, **options):
+        instance = cls(**options)
+        return instance(sources)
+
+    def __init__(self, **options):
+        self._conf = Config(options,
+            fallback=getattr(self, 'CONFIG_DEFAULTS', None),
+            schema=getattr(self, 'CONFIG_SCHEMA', None),
+            mutable=False)
+        print(self._conf)
+        self._sources = None
+
+    def __call__(self, sources):
+        raise NotImplementedError()
+
+    def __getattr__(self, name):
+        return self.__dict__.get('_conf', {}).get(name)
+
+class IntersectMerge(MergingStrategy):
+    # TODO: put this class to the right place
+    CONFIG_SCHEMA = SchemaBuilder() \
+        .add('iou_thresh', float) \
+        .add('do_nms', bool) \
+        .add('input_conf_thresh', float) \
+        .add('output_conf_thresh', float) \
+        .add('quorum', int) \
+        .add('ignored_attributes', set) \
+        .build()
+
+    @classmethod
+    def build_cmdline_parser(cls, **kwargs):
+        pass
+
+    _image = None # TODO: remove after debug
+    _item = None # TODO: remove after debug
+    def __call__(self, datasets):
+    merged = Dataset(
+            categories=merge_categories(d.categories() for d in datasets))
+
+        item_ids = set((item.id, item.subset) for d in datasets for item in d)
 
     for (item_id, item_subset) in item_ids:
         items = []
-        for i, s in enumerate(sources):
+            for i, d in enumerate(datasets):
             try:
-                items.append(s.get(item_id, subset=item_subset))
+                    items.append(d.get(item_id, subset=item_subset))
             except KeyError:
                 log.debug("Source #%s doesn't have item '%s' in subset '%s'",
                     1 + i + 1, item_id, item_subset)
+            merged.put(self.merge_items(items))
+        return merged
 
-        source_annotations = [[a for a in item.annotations
-            if conf_threshold <= a.attributes.get('score', 1)
+    def merge_items(self, items):
+        self._item = items[0]
+
+        sources = [[a for a in item.annotations
+            if self.input_conf_thresh <= a.attributes.get('score', 1)
             ] for item in items]
-        if do_nms:
-            source_annotations = list(map(nms, source_annotations))
-        annotations = merge_annotations_multi_match(source_annotations,
-            iou_threshold=iou_threshold, quorum=quorum,
-            ignored_attributes=ignored_attributes)
+        if self.do_nms:
+            sources = list(map(nms, sources))
+
+        annotations = self.merge_annotations(sources)
+
         annotations = [a for a in annotations
-            if output_conf_thresh <= a.attributes.get('score', 1)]
-        merged.put(items[0].wrap(annotations=annotations))
-    return merged
+            if self.output_conf_thresh <= a.attributes.get('score', 1)]
 
-def merge_annotations_multi_match(sources, iou_threshold=None,
-        quorum=None, ignored_attributes=None):
-    segments = [[a for a in s if a.type in SEGMENT_TYPES] for s in sources]
-    annotations = merge_segments(segments,
-        iou_threshold=iou_threshold, quorum=quorum,
-        ignored_attributes=ignored_attributes)
+        return items[0].wrap(annotations=annotations)
 
-    non_segments = [[a for a in s if a.type not in SEGMENT_TYPES]
-        for s in sources]
-    annotations += reduce(merge_annotations_unique, non_segments, [])
+    def merge_annotations(self, sources):
+        all_labels = []
+        all_segments = []
+        all_other = []
+        for s in sources:
+            labels = []
+            segments = []
+            other = []
+            for a in s:
+                if a.type in SEGMENT_TYPES:
+                    segments.append(a)
+                elif a.type == AnnotationType.label:
+                    labels.append(a)
+                else:
+                    other.append(a)
+            all_labels.append(labels)
+            all_segments.append(segments)
+            all_other.append(other)
 
-    return annotations
+        annotations = self._merge_segments(all_segments)
+        annotations += self._merge_labels(all_labels)
+        annotations += reduce(merge_annotations_unique, all_other, [])
 
-def merge_labels(sources, quorum=None):
-    votes = {} # label -> score
-    for s in chain(*sources):
-        for label_ann in s:
-            votes[label_ann.label] = 1.0 + votes.get(value, 0.0)
+        return annotations
 
-    labels = {}
-    for name, votes in votes.items():
-        labels[name] = max(votes.items(), key=lambda e: e[1])[0]
-
-    return labels
-
-def merge_segments(sources, iou_threshold=1.0,
-        ignored_attributes=None, quorum=None):
-    ignored_attributes = ignored_attributes or set()
-
-    clusters = find_segment_clusters(sources, pairwise_iou=iou_threshold)
-    group_map = find_cluster_groups(clusters)
+    def _merge_segments(self, sources):
+        clusters = self.find_segment_clusters(
+            sources, pairwise_iou=self.iou_threshold)
+        group_map = self.find_cluster_groups(clusters)
 
     merged = []
     for cluster_id, cluster in enumerate(clusters):
-        label, label_score = find_cluster_label(cluster, quorum=quorum)
+            label, label_score = self.find_cluster_label(
+                cluster, quorum=self.quorum)
         bbox = compute_bbox(cluster)
         segm_score = sum(max(0, segment_iou(Bbox(*bbox), s))
             for s in cluster) / len(cluster)
 
-        attributes = find_cluster_attrs(cluster, quorum=quorum)
+            attributes = self.find_cluster_attrs(cluster, quorum=self.quorum)
         attributes = { k: v for k, v in attributes.items()
-            if k not in ignored_attributes }
+                if k not in self.ignored_attributes }
 
         score = label_score * segm_score if label is not None else segm_score
         attributes['score'] = score
@@ -139,6 +178,21 @@ def merge_segments(sources, iou_threshold=1.0,
             attributes=attributes))
     return merged
 
+    def _merge_labels(self, sources):
+        votes = {} # label -> score
+        for s in chain(*sources):
+            for label_ann in s:
+                votes[label_ann.label] = 1.0 + votes.get(value, 0.0)
+
+        labels = {}
+        for name, votes in votes.items():
+            votes_count, label = max(votes.items(), key=lambda e: e[1])
+            if self.quorum <= votes_count:
+                labels[name] = label
+
+        return labels
+
+    @staticmethod
 def find_cluster_label(cluster, quorum=None):
     quorum = quorum or 0
 
@@ -159,6 +213,7 @@ def find_cluster_label(cluster, quorum=None):
     score = score / votes_count if votes_count else None
     return label, score
 
+    @staticmethod
 def find_cluster_groups(clusters):
     cluster_groups = []
     visited = set()
@@ -188,6 +243,7 @@ def find_cluster_groups(clusters):
         cluster_groups.append( (cluster_group, a_groups) )
     return cluster_groups
 
+    @staticmethod
 def find_cluster_attrs(cluster, quorum=None):
     quorum = quorum or 0
 
@@ -210,7 +266,7 @@ def find_cluster_attrs(cluster, quorum=None):
 
     return attributes
 
-def find_segment_clusters(sources, pairwise_iou=None, cluster_iou=None):
+    def find_segment_clusters(self, sources, pairwise_iou=None, cluster_iou=None):
     if pairwise_iou is None: pairwise_iou = 0.9
     if cluster_iou is None: cluster_iou = pairwise_iou
 

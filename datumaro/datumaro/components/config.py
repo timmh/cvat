@@ -218,6 +218,12 @@ class Config:
         with open(path, 'w+') as f:
             yaml.dump(self, f)
 
+    def __repr__(self):
+        return repr(dict(self))
+
+    def __str__(self):
+        return repr(self)
+
 yaml.add_multi_representer(Config, Config.yaml_representer)
 
 
