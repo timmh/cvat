@@ -135,7 +135,7 @@ def compute_ann_statistics(dataset):
         'distribution': {}, # value -> (count, total%)
     }
     label_stat = {
-        'count': len(labels.items) if labels else 0,
+        'count': 0,
         'distribution': { l.name: [0, 0] for l in labels.items
         }, # label -> (count, total%)
 
@@ -163,14 +163,14 @@ def compute_ann_statistics(dataset):
         for ann in item.annotations:
             by_type[ann.type.name]['count'] += 1
 
+            if not hasattr(ann, 'label') or ann.label is None:
+                continue
+
             if ann.type in {AnnotationType.mask,
                     AnnotationType.polygon, AnnotationType.bbox}:
                 area = ann.get_area()
                 segm_areas.append(area)
                 pixel_dist[get_label(ann)][0] += int(area)
-
-            if not hasattr(ann, 'label'):
-                continue
 
             label_stat['count'] += 1
             label_stat['distribution'][get_label(ann)][0] += 1
@@ -195,13 +195,15 @@ def compute_ann_statistics(dataset):
 
     for label_attr in label_stat['attributes'].values():
         label_attr['values count'] = len(label_attr['values present'])
-        label_attr['values present'] = list(label_attr['values present'])
+        label_attr['values present'] = sorted(label_attr['values present'])
         for attr_info in label_attr['distribution'].values():
-            attr_info[1] = attr_info[0] / label_attr['values count']
+            attr_info[1] = attr_info[0] / label_attr['count']
 
     # numpy.sum might be faster, but could overflow with large datasets.
     # Python's int can transparently mutate to be of indefinite precision (long)
     total_pixels = sum(int(a) for a in segm_areas)
+
+    segm_stat['avg. area'] = total_pixels / (len(segm_areas) or 1.0)
 
     for label_info in segm_stat['pixel distribution'].values():
         label_info[1] = label_info[0] / total_pixels
