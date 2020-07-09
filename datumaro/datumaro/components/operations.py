@@ -3,8 +3,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+from copy import deepcopy
+
 import cv2
 import numpy as np
+
+from datumaro.components.extractor import AnnotationType
 
 
 def mean_std(dataset):
@@ -92,9 +96,9 @@ def compute_image_statistics(dataset):
     def _extractor_stats(extractor):
         mean, std = mean_std(extractor)
         return {
-            'Total images': len(extractor),
-            'Image mean': ['%.3f' % n for n in mean],
-            'Image std': ['%.3f' % n for n in std],
+            'images count': len(extractor),
+            'image mean': [float(n) for n in mean[::-1]],
+            'image std': [float(n) for n in std[::-1]],
         }
 
     stats['dataset'].update(_extractor_stats(dataset))
@@ -108,26 +112,105 @@ def compute_image_statistics(dataset):
     return stats
 
 def compute_ann_statistics(dataset):
+    labels = dataset.categories().get(AnnotationType.label)
+    def get_label(ann):
+        return labels.items[ann.label].name if ann.label is not None else None
+
     stats = {
-        'Total images': len(dataset),
-        'Total annotations': 0,
-        'Annotations by type': {},
-        'Unannotated images': [],
+        'images count': len(dataset),
+        'annotations count': 0,
+        'unannotated images count': 0,
+        'unannotated images': [],
+        'annotations by type': { t.name: {
+            'count': 0,
+        } for t in AnnotationType },
+        'annotations': {},
     }
-    by_type = stats['Annotations by type']
+    by_type = stats['annotations by type']
+
+    attr_template = {
+        'count': 0,
+        'values count': 0,
+        'values present': set(),
+        'distribution': {}, # value -> (count, total%)
+    }
+    label_stat = {
+        'count': len(labels.items) if labels else 0,
+        'distribution': { l.name: [0, 0] for l in labels.items
+        }, # label -> (count, total%)
+
+        'attributes': {},
+    }
+    stats['annotations']['labels'] = label_stat
+    segm_stat = {
+        'avg. area': 0,
+        'area distribution': [], # a histogram with 10 bins
+        # (min, min+10%), ..., (min+90%, max) -> (count, total%)
+
+        'pixel distribution': { l.name: [0, 0] for l in labels.items
+        }, # label -> (count, total%)
+    }
+    stats['annotations']['segments'] = segm_stat
+    segm_areas = []
+    pixel_dist = segm_stat['pixel distribution']
+    total_pixels = 0
 
     for item in dataset:
         if len(item.annotations) == 0:
-            stats['Unannotated images'].append(item.id)
-        else:
-            for ann in item.annotations:
-                by_type[ann.type.name] = by_type.get(ann.type.name, 0) + 1
+            stats['unannotated images'].append(item.id)
+            continue
 
-                for name, value in ann.attributes.items():
-                    by_val = by_attr.get(name, {})
-                    by_val[str(value)] = by_val.get(str(value), 0) + 1
-                    by_attr[name] = by_val
+        for ann in item.annotations:
+            by_type[ann.type.name]['count'] += 1
 
-    stats['Total annotations'] = sum(stats['Annotations by type'].values())
+            if ann.type in {AnnotationType.mask,
+                    AnnotationType.polygon, AnnotationType.bbox}:
+                area = ann.get_area()
+                segm_areas.append(area)
+                pixel_dist[get_label(ann)][0] += int(area)
+
+            if not hasattr(ann, 'label'):
+                continue
+
+            label_stat['count'] += 1
+            label_stat['distribution'][get_label(ann)][0] += 1
+
+            for name, value in ann.attributes.items():
+                if name.lower() in { 'occluded', 'visibility', 'score',
+                        'id', 'track_id' }:
+                    continue
+                attrs_stat = label_stat['attributes'].setdefault(name,
+                    deepcopy(attr_template))
+                attrs_stat['count'] += 1
+                attrs_stat['values present'].add(str(value))
+                attrs_stat['distribution'] \
+                    .setdefault(str(value), [0, 0])[0] += 1
+
+    stats['annotations count'] = sum(t['count'] for t in
+        stats['annotations by type'].values())
+    stats['unannotated images count'] = len(stats['unannotated images'])
+
+    for label_info in label_stat['distribution'].values():
+        label_info[1] = label_info[0] / label_stat['count']
+
+    for label_attr in label_stat['attributes'].values():
+        label_attr['values count'] = len(label_attr['values present'])
+        label_attr['values present'] = list(label_attr['values present'])
+        for attr_info in label_attr['distribution'].values():
+            attr_info[1] = attr_info[0] / label_attr['values count']
+
+    # numpy.sum might be faster, but could overflow with large datasets.
+    # Python's int can transparently mutate to be of indefinite precision (long)
+    total_pixels = sum(int(a) for a in segm_areas)
+
+    for label_info in segm_stat['pixel distribution'].values():
+        label_info[1] = label_info[0] / total_pixels
+
+    if len(segm_areas) != 0:
+        hist, bins = np.histogram(segm_areas)
+        segm_stat['area distribution'] = [{
+            'min': float(bin_min), 'max': float(bin_max),
+            'count': int(c), 'percent': int(c) / len(segm_areas)
+        } for c, (bin_min, bin_max) in zip(hist, zip(bins[:-1], bins[1:]))]
 
     return stats
