@@ -4,7 +4,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0-alpha] - Unreleased
+## [1.1.0-beta] - Unreleased
+### Added
+-
+
+### Changed
+-
+
+### Deprecated
+-
+
+### Removed
+-
+
+### Fixed
+- Some objects aren't shown on canvas sometimes. For example after propagation on of objects is invisible (<https://github.com/opencv/cvat/pull/1834>)
+- CVAT doesn't offer to restore state after an error (<https://github.com/opencv/cvat/pull/1874>)
+- Cannot read property 'shapeType' of undefined because of zOrder related issues (<https://github.com/opencv/cvat/pull/1874>)
+- Cannot read property 'pinned' of undefined because of zOrder related issues (<https://github.com/opencv/cvat/pull/1874>)
+- Do not iterate over hidden objects in aam (which are invisible because of zOrder) (<https://github.com/opencv/cvat/pull/1874>)
+- Cursor position is reset after changing a text field (<https://github.com/opencv/cvat/pull/1874>)
+- Hidden points and cuboids can be selected to be groupped (<https://github.com/opencv/cvat/pull/1874>)
+- `outside` annotations should not be in exported images (<https://github.com/opencv/cvat/issues/1620>)
+
+### Security
+-
+
+## [1.1.0-alpha] - 2020-06-30
 ### Added
 - Throttling policy for unauthenticated users (<https://github.com/opencv/cvat/pull/1531>)
 - Added default label color table for mask export (<https://github.com/opencv/cvat/pull/1549>)
@@ -15,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Built-in search for labels when create an object or change a label (<https://github.com/opencv/cvat/pull/1683>)
 - Better validation of labels and attributes in raw viewer (<https://github.com/opencv/cvat/pull/1727>)
 - ClamAV antivirus integration (<https://github.com/opencv/cvat/pull/1712>)
+- Added canvas background color selector (<https://github.com/opencv/cvat/pull/1705>)
 - SCSS files linting with Stylelint tool (<https://github.com/opencv/cvat/pull/1766>)
 - Supported import and export or single boxes in MOT format (https://github.com/opencv/cvat/pull/1764)
 - [Datumaro] Added `stats` command, which shows some dataset statistics like image mean and std (https://github.com/opencv/cvat/pull/1734)
@@ -24,13 +51,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Highlights for the first point of a polygon/polyline and direction (<https://github.com/opencv/cvat/pull/1571>)
 - Ability to change orientation for poylgons/polylines in context menu (<https://github.com/opencv/cvat/pull/1571>)
 - Ability to set the first point for polygons in points context menu (<https://github.com/opencv/cvat/pull/1571>)
-- [Datumaro] Basic dataset quality estimation with a model (https://github.com/opencv/cvat/pull/1668)
+- Added new tag annotation workspace (<https://github.com/opencv/cvat/pull/1570>)
+- Appearance block in attribute annotation mode (<https://github.com/opencv/cvat/pull/1820>)
+- Keyframe navigations and some switchers in attribute annotation mode (<https://github.com/opencv/cvat/pull/1820>)
+- [Datumaro] Added `convert` command to convert datasets directly (<https://github.com/opencv/cvat/pull/1837>)
+- [Datumaro] Basic dataset quality estimation with a model, dataset statistics (<https://github.com/opencv/cvat/pull/1668>)
 
 ### Changed
 - Removed information about e-mail from the basic user information (<https://github.com/opencv/cvat/pull/1627>)
 - Update https install manual. Makes it easier and more robust. Includes automatic renewing of lets encrypt certificates.
+- Settings page move to the modal. (<https://github.com/opencv/cvat/pull/1705>)
 - Implemented import and export of annotations with relative image paths (<https://github.com/opencv/cvat/pull/1463>)
 - Using only single click to start editing or remove a point (<https://github.com/opencv/cvat/pull/1571>)
+- Added support for attributes in VOC XML format (https://github.com/opencv/cvat/pull/1792)
+- Added annotation attributes in COCO format (https://github.com/opencv/cvat/pull/1782)
+- Colorized object items in the side panel (<https://github.com/opencv/cvat/pull/1753>)
 
 ### Deprecated
 -
@@ -47,10 +82,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Wrong description on register view for the username field (<https://github.com/opencv/cvat/pull/1667>)
 - Wrong resolution for resizing a shape (<https://github.com/opencv/cvat/pull/1667>)
 - React warning because of not unique keys in labels viewer (<https://github.com/opencv/cvat/pull/1727>)
+- Fixed issue tracker (<https://github.com/opencv/cvat/pull/1705>)
+- Fixed canvas fit after sidebar open/close event (<https://github.com/opencv/cvat/pull/1705>)
 - A couple of exceptions in AAM related with early object activation (<https://github.com/opencv/cvat/pull/1755>)
 - Propagation from the latest frame (<https://github.com/opencv/cvat/pull/1800>)
 - Number attribute value validation (didn't work well with floats) (<https://github.com/opencv/cvat/pull/1800>)
-
+- Logout doesn't work (<https://github.com/opencv/cvat/pull/1812>)
+- Annotations aren't updated after reopening a task (<https://github.com/opencv/cvat/pull/1753>)
+- Labels aren't updated after reopening a task (<https://github.com/opencv/cvat/pull/1753>)
+- Canvas isn't fitted after collapsing side panel in attribute annotation mode (<https://github.com/opencv/cvat/pull/1753>)
+- Error when interpolating polygons (<https://github.com/opencv/cvat/pull/1878>)
 
 ### Security
 - SQL injection in Django `CVE-2020-9402` (<https://github.com/opencv/cvat/pull/1657>)
