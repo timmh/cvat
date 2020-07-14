@@ -223,3 +223,6 @@ application/zip zip
 
 # PDF
 application/pdf pdf
+
+# Rosbag
+application/x-bag bag

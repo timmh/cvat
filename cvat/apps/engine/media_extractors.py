@@ -14,6 +14,7 @@ import av.datasets
 import numpy as np
 from pyunpack import Archive
 from PIL import Image, ImageFile
+import pyrealsense2 as rs
 
 # fixes: "OSError:broken data stream" when executing line 72 while loading images downloaded from the web
 # see: https://stackoverflow.com/questions/42462431/oserror-broken-data-stream-when-reading-image-file
@@ -246,6 +247,91 @@ class VideoReader(IMediaReader):
         image = (next(iter(self)))[0]
         return image.width, image.height
 
+class RosbagReader(IMediaReader):
+    def __init__(self, source_path, step=1, start=0, stop=None):
+        super().__init__(
+            source_path=source_path,
+            step=step,
+            start=start,
+            stop=stop + 1 if stop is not None else stop,
+        )
+
+    def _has_frame(self, i):
+        if i >= self._start:
+            if (i - self._start) % self._step == 0:
+                if self._stop is None or i < self._stop:
+                    return True
+
+        return False
+
+    def _decode(self):
+        rs_pipe = rs.pipeline()
+        rs_cfg = rs.config()
+        rs_cfg.enable_device_from_file(self._source_path[0], repeat_playback=False)
+        rs_profile = rs_pipe.start(rs_cfg)
+        rs_playback = rs_profile.get_device().as_playback()
+        rs_playback.set_real_time(False)
+
+        frame_idx = 0
+        while True:
+            try:
+                frameset = rs_pipe.wait_for_frames()
+            except RuntimeError:
+                break
+
+            color = np.asanyarray(frameset.get_color_frame().get_data())
+            frame = av.VideoFrame.from_ndarray(
+                color, format="rgb24"
+            )
+
+            yield (frame, self._source_path[0], frame_idx)
+            frame_idx += 1
+
+            if rs_playback.current_status() != rs.playback_status.playing:
+                break
+
+        rs_pipe.stop()
+
+    def __iter__(self):
+        return self._decode()
+
+
+    def get_progress(self, pos):
+        # TODO
+        return None
+
+    def get_preview(self):
+        rs_pipe = rs.pipeline()
+        rs_cfg = rs.config()
+        rs_cfg.enable_device_from_file(self._source_path[0], repeat_playback=False)
+        rs_profile = rs_pipe.start(rs_cfg)
+        rs_playback = rs_profile.get_device().as_playback()
+        rs_playback.set_real_time(False)
+
+        while True:
+            try:
+                frameset = rs_pipe.wait_for_frames()
+            except RuntimeError:
+                break
+
+            color = np.asanyarray(frameset.get_color_frame().get_data())
+            frame = av.VideoFrame.from_ndarray(
+                color, format="rgb24"
+            )
+
+            break
+
+        rs_pipe.stop()
+
+        if frame:
+            return self._get_preview(frame.to_image())
+        else:
+            return None
+
+    def get_image_size(self):
+        # TODO
+        return 1920, 1080
+
 class IChunkWriter(ABC):
     def __init__(self, quality):
         self._image_quality = quality
@@ -408,6 +494,10 @@ def _is_video(path):
     mime = mimetypes.guess_type(path)
     return mime[0] is not None and mime[0].startswith('video')
 
+def _is_rosbag(path):
+    mime = mimetypes.guess_type(path)
+    return mime[0] == 'application/x-bag'
+
 def _is_image(path):
     mime = mimetypes.guess_type(path)
     # Exclude vector graphic images because Pillow cannot work with them
@@ -446,6 +536,12 @@ MEDIA_TYPES = {
     'video': {
         'has_mime_type': _is_video,
         'extractor': VideoReader,
+        'mode': 'interpolation',
+        'unique': True,
+    },
+    'rosbag': {
+        'has_mime_type': _is_rosbag,
+        'extractor': RosbagReader,
         'mode': 'interpolation',
         'unique': True,
     },
